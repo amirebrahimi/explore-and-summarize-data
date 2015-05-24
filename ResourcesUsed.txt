@@ -1,0 +1,8 @@
+http://www.dot.gov/policy/aviation-policy/domestic-airline-consumer-airfare-report
+http://www.dot.gov/policy/aviation-policy/air-fare-information-consumers
+http://en.wikipedia.org/wiki/Flight_length
+http://www.statmethods.net/
+http://stackoverflow.com/
+http://www.rstudio.com/
+http://en.wikipedia.org/wiki/National_Airlines_%281999%E2%80%932002%29
+http://docs.ggplot2.org/

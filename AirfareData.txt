@@ -1,0 +1,17 @@
+Quarterly fares for 338 airports
+
+Source: Department of Transportation (DOT)
+http://www.dot.gov/policy/aviation-policy/domestic-airline-consumer-airfare-report
+
+Description:
+A dataset containing 161,743 quarterly fares for 338 airports for years 2001-2014. 
+
+Usage:
+af.read(year, qtr)
+
+Format:
+When combined, a data frame with 161,743 rows and 13 variables
+
+Details:
+(variable)	(example)	(description)
+Year		2014		Data yearquarter		2		Data quarternsmiles		580		Non-stop market miles (using radian measure)airport_1	ABQ		Airport codeairport_2	DAL		Airport codepassengers	362.4175824	Passenger per dayfare		189.9777744	Overall average farecarrier_lg	WN		Carrier with the largest farelarge_ms	0.995148575	Market share for the largest carrierfare_lg		189.7290067	Average fare for the largest carriercarrier_low	WN		Carrier with the lowest farelf_ms		0.995148575	Market share for the lowest carrierfare_low	189.7290067	Average fare for the lowest carrier
