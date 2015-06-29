@@ -1,5 +1,6 @@
-Airfare Exploration by Amir Ebrahimi
-========================================================
+Airfare Exploratory Data Analysis (EDA) 
+=======================================
+by Amir Ebrahimi
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
 # Load all of the packages that you end up using
@@ -18,6 +19,7 @@ library(tidyr)
 library(zoo)
 library(grid)
 library(gridExtra)
+library(scales)
 
 af.read <- function(year, qtr) {
   tbl1a <- sprintf('1a-%d_%d.csv', year, qtr)
@@ -93,6 +95,19 @@ af.read <- function(year, qtr) {
 }
 ```
 
+The analysis that follows make use of the the DOT's quarterly airfare data from
+the Domestic Airline Consumer Airfare Report. The reports and airfare data can
+be found in original form at:
+
+http://www.transportation.gov/policy/aviation-policy/domestic-airline-consumer-airfare-report
+
+My goals for this analysis are primarily to have an informed perspective of air
+travel from actual data. Secondarily, I'm hoping that some practical facts 
+emerge that any traveler could benefit from. I will perform univariate, 
+bivariate, and multivariate analysis in order to achieve these goals. Finally, 
+I will attempt to build a linear model that can account for relationships among
+the data.
+
 ```{r echo=FALSE, Load_the_Data}
 # Load the Data
 
@@ -142,23 +157,50 @@ af.na <- setdiff(af.all, af)
 
 af$haul <- cut(af$nsmiles, breaks = c(0, 500, max(af$nsmiles)), 
                labels = c("short", "medium"))
+```
+
+Some records were missing the information for the low and large fare carriers.
+Others had erroneous fare data. Incomplete records are not that useful to me
+in the analysis and since the NA data is less than 1% of the overall data I 
+am deciding to exclude these records from the analysis. The summary below shows
+the individual NA counts per variable.
+
+```{r echo=FALSE}
+summary(af.na)
 
 sprintf("Omitting %d NA records (%0.2f%% of all records)", 
         nrow(af.all) - nrow(af), (1 - nrow(af) / nrow(af.all)) * 100)
-summary(af.na)
 ```
 
 # Univariate Plots Section
+The variables in the dataset are:
 ```{r echo=FALSE, Dataframe}
 names(af)
+```
+
+The structure of the dataset and some sample values are:
+```{r echo=FALSE}
 str(af)
+```
+
+Airports and carriers are factored variables in the dataset. The full names for
+the airport and carriers can be looked up by code at [IATA][1].
+
+[1]: http://www.iata.org/publications/Pages/code-search.aspx
+
+```{r echo=FALSE}
 lapply(af[factored_variables], levels)
+```
+
+Here is a summary of all of the variables in the dataset:
+
+```{r echo=FALSE}
 summary(af)
 ```
 
 Across all of the airport pair markets:
 
-* the average miles traveled is 1095
+* the average miles traveled one way is 1095
 * the average passengers per day is 187
 * the median passengers per day is 27
 * the average of average quarterly fares is $242 and the max is $2567
@@ -187,7 +229,7 @@ af %>%
 ```
 
 Now, I'm wanting to see what the most traveled airport pairs were for any given 
-quarter:
+quarter were:
 
 ```{r echo=FALSE}
 af %>%
@@ -195,7 +237,11 @@ af %>%
   summarise(max_passengers = max(passengers)) %>%  
   ungroup() %>%  
   arrange(desc(max_passengers))
+```
 
+What year year and quarter was the most traveled airport pair from?
+
+```{r echo=FALSE}
 af %>%
   filter(airport_1 == 'JFK' & airport_2 == 'LAX') %>%
   arrange(desc(passengers)) %>%
@@ -222,6 +268,8 @@ all_airports <- af  %>%
 all_airports
 ```
 
+So, there are 338 unique airports that exist in various airport pairs.
+
 ```{r echo=FALSE}
 airports <- af  %>% 
   mutate(ap = as.character(airport_1)) %>%
@@ -238,10 +286,20 @@ airports <- af  %>%
 
 top_ten_airports = airports$ap[1:10]
 top_five_airports = airports$ap[1:5]
+```
 
+What are the top ten airports based on the cumulative count of passengers that
+traveled through them for the time period covered in the dataset?
+
+```{r echo=FALSE}
 airports %>%
   arrange(desc(sum_passengers))
+```
 
+What are the top ten airports based on the average count of passengers that 
+traveled through them across all quarters?
+
+```{r echo=FALSE}
 airports %>%
   arrange(desc(avg_passengers))
 ```
@@ -253,7 +311,16 @@ airports %>%
   arrange(desc(avg_fare))
 ```
 
-Moving on to other variables:
+TSS is the East 34th Street Heliport in NY, which technically isn't an airport,
+but is included in the DOT fare data. According to [Wikipedia][2], 72% of the
+flights are airtaxi.
+
+[2]: https://en.wikipedia.org/wiki/East_34th_Street_Heliport
+
+Moving on to other variables...
+
+Looking at `fare`, which is the price paid for one-way travel between an airport
+pair:
 
 ```{r echo=FALSE, Univariate_Plots}
 ggplot(af, aes(x = fare)) + geom_histogram(binwidth = 1)
@@ -267,9 +334,11 @@ on the x-axis to better view the histogram of fares
 ```{r echo=FALSE}
 ggplot(af, aes(x = fare)) + geom_histogram(binwidth = 1) +
   xlim(c(min(af$fare), 500))
+
+summary(af$fare)
 ```
 
-I'm curious what the outliers look like:
+I'm curious what the outliers look like (anything above the 99th quantile):
 
 ```{r echo=FALSE}
 subset(af, fare > quantile(af$fare, .99)) %>%
@@ -294,8 +363,29 @@ subset(af, passengers < 1) %>%
 Surprisingly, it isn't as high as I thought it would be, but does fall beyond
 the third quartile.
 
+Next, I want to see a breakdown of `fare` by `haul` to see the fare distribution
+for short and medium flights:
+
+```{r echo=FALSE}
+ggplot(af, aes(x = fare, fill = haul)) + 
+  geom_histogram(binwidth = 1, position = 'dodge') +
+  xlim(c(min(af$fare), 500))
+
+af %>%
+  group_by(haul) %>%
+  summarise(mean(fare))
+```
+
+I can see from this graph that there are more medium flights than short flights
+in the dataset. It's understable that the average fare for short flights would
+cost less than medium flights.
+
+Looking at `nsmiles`, which is the one-way distance between airport pairs:
+
 ```{r echo=FALSE}
 ggplot(af, aes(x = nsmiles)) + geom_histogram(binwidth = 10)
+
+summary(af$nsmiles)
 ```
 
 Mileage between airport pairs looks somewhat multimodal with heteroskedasticity 
@@ -305,26 +395,69 @@ or possibly a skewed normal distribution.
 ggplot(af, aes(x = passengers)) + geom_histogram()
 ```
 
-Re-scaling x-axis (log10) to view the long tail better:
+If I re-scale the x-axis (log10), then I can view the long tail better:
 
 ```{r echo=FALSE}
 ggplot(af, aes(x = passengers)) + geom_histogram() +
   scale_x_log10()
+
+summary(af$passengers)
 ```
+
+The mean is larger than the median in this right-skewed histogram.
+
+Now, let's see a breakdown of `passengers` for small and medium flights to see
+how the feature is affected by flight length:
+
+```{r echo=FALSE}
+ggplot(af, aes(x = passengers, fill = haul)) + 
+  geom_histogram(position = 'dodge') +
+  scale_x_log10()
+
+af %>%
+  group_by(haul) %>%
+  summarise(mean(passengers))
+```
+
+I find it interesting to see that short haul trips have more passengers on 
+average than medium trips (e.g. coast-to-coast travel).
+
+Next, looking at `fare_lg`, which is the largest fare carrier's average fare
+for the quarter:
 
 ```{r echo=FALSE}
 ggplot(af, aes(x = fare_lg)) + geom_histogram(binwidth = 1) + 
   xlim(c(min(af$fare_lg), 500))
+
+summary(af$fare_lg)
+```
+
+The largest fares seem to closely match the average fares, which makes me think
+that very few low fares are sold in quantity.
+
+So, now let's look at `fare_low`, which are the lowest fare carrier's average 
+fare:
+
+```{r echo=FALSE}
 ggplot(af, aes(x = fare_low)) + geom_histogram(binwidth = 1) + 
   xlim(c(min(af$fare_low), 500))
+
+summary(af$fare_low)
 ```
+
+The distribution looks compressed, but similar to the large fare distribution,
+albeit with a lower mean and median.
 
 Now, I'm curious about the difference between the average low and large fares:
 
 ```{r echo=FALSE}
 af %>%
   summarise(fare_diff = mean(fare_lg) - mean(fare_low))
+```
 
+In terms of percentage of the average fare:
+
+```{r echo=FALSE}
 af %>%
   mutate(fare_diff_percentage = (fare_lg - fare_low) / fare) %>%
   summarise(mean(fare_diff_percentage))
@@ -333,9 +466,14 @@ af %>%
 So, it looks like fares have a variance of 7% of the average fare between
 the average large and low fares.
 
+Now, let me take a look at `large_ms`, which is the large fare carrier's market
+share:
+
 ```{r echo=FALSE}
 ggplot(af, aes(x = large_ms)) + geom_histogram(binwidth = 0.016) +
   scale_x_continuous(breaks = seq(0, 1, 0.1))
+
+summary(af$large_ms)
 ```
 
 Seems like there is a sizable count of carriers with the largest fare that have
@@ -350,21 +488,59 @@ local({
 })
 ```
 
+So, 8.5% of all of the fare data is from carriers that have 100% market share 
+between two airport pairs.
+
+What is the market share distribution for large fare carriers based on trip
+length?
+
+```{r echo=FALSE}
+ggplot(af, aes(x = large_ms, fill = haul)) +
+  geom_histogram(binwidth = 0.016, position = 'dodge') +
+  scale_x_continuous(breaks = seq(0, 1, 0.1)) 
+```
+
+The distribution for medium length trips closely resembles the overall 
+distribution, which is indicative of a higher quantity of medium haul trips
+having taken place over the reporting period.
+
+So, what percentage of trips are short haul trips overall?
+
+```{r echo=FALSE}
+local({
+  short_haul_count <- af %>%
+    count(haul == 'short')
+  print(short_haul_count)
+  short_haul_count[2,2] / short_haul_count[1,2]
+})
+```
+
+I was expecting a much lower percentage than 21%, however, it does help round
+out the picture of the overall market. Knowing that 79% of airport pairs are 
+medium haul distance (> 500 miles) is corroborated by the mean statistic 
+of `nsmiles`.
+
+Now, let me take a look at `lf_ms`, which is the low fare carrier's market 
+share:
 
 ```{r echo=FALSE}
 ggplot(af, aes(x = lf_ms)) + geom_histogram(binwidth = 0.016) +
   scale_x_continuous(breaks = seq(0, 1, 0.1))
+
+summary(af$lf_ms)
 ```
 
-This last one is interesting, since there is a spike at 10%, so I looked at the
+This last plot is interesting, since there is a spike at 10%, so I looked at the
 data to verify that it was good, which it is. The reason for this spike in the
-data is [explained][1] by the DOT:
+data is [explained][3] by the DOT:
 
 *Note that the “lowest fare carrier” is the carrier with the lowest average fare 
 that has at least a 10 percent share of the traffic in the market, except for 
 markets where only a single carrier has a 10 percent or greater share.*
 
-[1]: http://www.dot.gov/policy/aviation-policy/air-fare-information-consumers
+[3]: http://www.dot.gov/policy/aviation-policy/air-fare-information-consumers
+
+Let's take a closer look at this plot and what the underlying data looks like:
 
 ```{r echo=FALSE}
 ggplot(af, aes(x = lf_ms)) + geom_histogram(binwidth = 0.01) + xlim(c(0, 0.2))
@@ -372,6 +548,21 @@ subset(af, lf_ms < 0.1) %>%
   select(Year, quarter, nsmiles, airport_1, airport_2, 
          carrier_low, lf_ms, fare_low)
 ```
+
+From the above data it looks like ABQ (Albuquerque International Sunport) is
+dominated by a single large carrier.
+
+Since we looked at distribution for large fare carriers based on trip length, 
+we might as well look at the same for low fare carriers:
+
+```{r echo=FALSE}
+ggplot(af, aes(x = lf_ms, fill = haul)) +
+  geom_histogram(binwidth = 0.016, position = 'dodge') +
+  scale_x_continuous(breaks = seq(0, 1, 0.1))
+```
+
+Nothing really stands out from this plot as significant to me. The distributions
+look roughly the same for both short haul and medium haul flights.
 
 Finally, I'm curious about what percentage of carriers are both the largest and
 lowest fare carrier:
@@ -381,6 +572,10 @@ af %>%
   filter(as.character(carrier_lg) == as.character(carrier_low)) %>%
   summarise(n() / nrow(af))
 ```
+
+So, 55.9% of carriers are both the largest and lowest fare carrier, which could
+mean many things. One possibility might be that a majority of carriers remain 
+competitive by offering low fares in addition to being the largest fare carrier.
 
 # Univariate Analysis
 
@@ -417,7 +612,8 @@ fares.
 At the time of my univariate analysis I had not created any variables. However,
 after performing bivariate analysis I thought it would be good to create an 
 additional categorical variable, haul, for segmenting short and medium trips. A
-medium trip is anything over 500 miles.
+medium trip is anything over 500 miles. I then went back and performed 
+additional univariate analysis.
 
 ### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
 
@@ -429,18 +625,29 @@ to the data loading functions. These changes were necessary in order to have
 consistent data to analyze.
 
 # Bivariate Plots Section
+Let's start by taking a look at the correlation matrix across all features:
+
 ```{r echo=FALSE, Bivariate_Plots}
 cor(af[,sapply(af, is.numeric)])
+```
+
+Based on the correlation matrix it seems that it's worth looking into mileage,
+year, and fare further:
+
+```{r echo=FALSE}
 cor.test(af$nsmiles, af$fare)
 cor.test(af$Year, af$fare)
 ```
 
 As predicted, there is a strong positive correlation between mileage and fare, 
-but passengers has a negligible relationship to price. Year has a moderate
+but passenger count has a negligible relationship to price. Year has a moderate
 positive correlation with fare.
 
+Let me perform a plot matrix of `Year`, `quarter`, `fare`, `nsmiles`, 
+`passengers`, `carrier_lg`, `large_ms` to get a sense of what the data looks 
+like visually:
+
 ```{r echo=FALSE}
-# af_subset = af[,c("SrcApt", "DstApt", "Distance", "AvgFare")]
 set.seed(20150522)
 af.subset <- af %>%
   select(Year, quarter, fare, nsmiles, passengers, carrier_lg, large_ms) %>%
@@ -449,6 +656,9 @@ af.subset <- af %>%
 # ggpairs(af.subset, axisLabels = 'internal')
 ```
 ![](bivariate.png)
+
+Based on the correlation values between `nsmiles` and `fare`, let's take a look
+at that plot:
 
 ```{r echo=FALSE}
 af.plot <- af
@@ -459,15 +669,73 @@ ggplot(af.plot, aes(x = nsmiles, y = fare)) +
   geom_smooth() +
   geom_smooth(aes(x = nsmiles, y = fare_low), linetype = 2, color = 'green') +
   stat_smooth(method = 'lm', col = 'red')
+```
 
+The trend line (red), shows a positive correlation between mileage and fare. In
+other words, fare increases as mileage increases, which makes sense intuitively.
+The blue line shows the smoothing of the point data and the green line shows the
+low fare carrier's average fare (smoothed as well).
+
+Let's also take a look at `fare` as categorized by `haul` (trip length):
+
+```{r echo=FALSE}
+ggplot(af.plot, aes(x = haul, y = fare)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(100, 350))
+
+af %>% 
+  group_by(haul) %>% 
+  summarise(mean(fare), median(fare), IQR(fare))
+```
+
+Interestingly enough, the interquartile range (IQR) is roughly the same between
+short and medium haul trips.
+
+Let's take a look at `Year` and `fare`:
+
+```{r echo=FALSE}
 ggplot(af.plot, aes(x = Year, y = fare)) + 
-  geom_point(alpha = 1 / (nrow(af.plot) * 0.0005)) +
+  geom_jitter(alpha = 1 / (nrow(af.plot) * 0.0005)) +
   coord_cartesian(ylim = c(0, 600)) +
-  geom_line(linetype = 2, stat = 'summary', fun.y = mean)
+  geom_line(linetype = 2, stat = 'summary', fun.y = mean, color='green')
+```
 
+From the look of the fare data plotted it looks like there was an increase in
+air travel for 2011-2013, which has a darker region. There's also a average
+trend upward (dotted line) of fare increasing over time.
+
+Now, let me take a look at `nsmiles` and `large_ms`:
+
+```{r echo=FALSE}
 ggplot(af.plot, aes(x = nsmiles, y = large_ms)) + 
   geom_point(alpha = 1 / (nrow(af.plot) * 0.0005)) +
   geom_smooth()
+```
+
+With the concentration of 100% market share carriers, it makes sense to separate
+out the 100% market share carriers and view a distribution:
+
+```{r echo=FALSE}
+ggplot(subset(af.plot, large_ms == 1), aes(x = nsmiles)) + 
+  geom_histogram(aes(y = ..density..), binwidth = 10) +
+  geom_density(col = 'red') +
+  scale_x_continuous(breaks = seq(0, 3000, 200))
+```
+
+So, 100% market share carriers seem to have bi-modal distribution primarily 
+around 200 and 900 miles when looking at the density smoothing.
+
+Continuing with a scatterplot of the rest of the large fare carriers not having
+100% market share:
+
+```{r echo=FALSE}
+local({
+  af_subset <- subset(af.plot, large_ms < 1)
+  
+  ggplot(af_subset, aes(x = nsmiles, y = large_ms)) + 
+  geom_point(alpha = 1 / (nrow(af_subset) * 0.0005)) +
+  geom_smooth()
+})
 ```
 
 It is interesting to see that carriers with the largest fare lose market share
@@ -475,49 +743,127 @@ as the distance increases. My guess is that with the correlation between
 distance and fare that there is more competition across longer flights because
 there is more revenue to be gained.
 
+Now, let's do the same with low fare carriers by looking at `nsmiles` and 
+`lf_ms`:
+
 ```{r echo=FALSE}
-ggplot(af.plot, aes(x = nsmiles, y = lf_ms)) + 
-  geom_point(alpha = 1 / (nrow(af.plot) * 0.0005)) +
-  geom_smooth()
-
-ggplot(af, aes(x = fare, color = haul)) + geom_histogram(binwidth = 1) +
-  xlim(c(min(af$fare), 500))
-
-ggplot(af, aes(x = passengers, fill = haul)) + geom_histogram() +
-  scale_x_log10()
-
-af %>%
-  group_by(haul) %>%
-  summarise(mean(passengers))
+ggplot(subset(af.plot, lf_ms == 1), aes(x = nsmiles)) + 
+  geom_histogram(aes(y = ..density..), binwidth = 10) +
+  geom_density(col = 'red') +
+  scale_x_continuous(breaks = seq(0, 3000, 200))
 ```
 
-Interesting to see that short haul trips have more passengers on average than
-medium trips (e.g. coast-to-coast travel)
+The low fare 100% market share carriers also seem to have bi-modal distribution
+around 200 and 900 miles.
+
+Continuing with a scatterplot of the rest of the low fare carriers not having
+100% market share:
+
+```{r echo=FALSE}
+local({
+  af_subset <- subset(af.plot, lf_ms < 1)
+  
+  ggplot(af_subset, aes(x = nsmiles, y = lf_ms)) + 
+  geom_point(alpha = 1 / (nrow(af_subset) * 0.0005)) +
+  geom_smooth()
+})
+```
+
+There is also a similar trend here where carriers lose market share as the
+flight distance increases, however, a little more significantly than large
+fare carriers.
+
+Continuing with `passengers`, what's the trend across all of the years in the
+dataset?
 
 ```{r echo=FALSE}
 ggplot(af.plot, aes(x = Year, y = passengers)) +
   geom_line(stat = 'summary', fun.y = mean) +
-  scale_x_continuous(breaks = seq(min(af.plot$Year), max(af.plot$Year), 1))
+  geom_jitter(alpha = 1 / (nrow(af.plot) * 0.0005)) +
+  scale_x_continuous(breaks = seq(min(af.plot$Year), max(af.plot$Year), 1)) +
+  coord_cartesian(ylim = c(0, 2000))
 ```
 
 Looks like 2012 was the best year for average passengers traveling, a drop in
 2013, and a return in 2014.
 
+I wonder what we can see if we plot the fare variances across all the large fare
+carriers:
+
 ```{r echo=FALSE}
-ggplot(af, aes(x = large_ms, fill = haul)) + geom_histogram(binwidth = 0.016) +
-  scale_x_continuous(breaks = seq(0, 1, 0.1))
-
-ggplot(af, aes(x = lf_ms, fill = haul)) + geom_histogram(binwidth = 0.016) +
-  scale_x_continuous(breaks = seq(0, 1, 0.1))
-
 ggplot(af.plot, aes(x = carrier_lg, y = fare_lg)) + 
   geom_boxplot() +
-  coord_cartesian(ylim = c(0, 500))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  coord_cartesian(ylim = c(50, 350))
+```
 
-ggplot(af.plot, aes(x = carrier_low, y = fare_low)) + 
-  geom_boxplot() +
-  coord_cartesian(ylim = c(0, 500))
+It's a busy plot, however I can see that United Airlines (UA) has the largest
+median fare. Let me double check this is the case by computing median statistics
+of the large fare for all large fare carriers (sorted high-to-low):
 
+```{r echo=FALSE}
+af %>% 
+  group_by(carrier_lg) %>% 
+  summarise(median_fare_lg = median(fare_lg)) %>% 
+  arrange(desc(median_fare_lg))
+```
+
+Might as well view the plot of the top ten large carriers (based on median 
+fare):
+
+```{r echo=FALSE}
+local({
+  af_local <- af %>% 
+    group_by(carrier_lg) %>% 
+    summarise(median_fare_lg = median(fare_lg)) %>% 
+    arrange(desc(median_fare_lg))
+  carriers = af_local$carrier_lg[1:10]
+  
+  af_local <- af.plot %>% 
+    filter(carrier_lg %in% carriers)
+  
+  ggplot(af_local, aes(x = carrier_lg, y = fare_lg)) + 
+    geom_boxplot() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    coord_cartesian(ylim = c(125, 350))
+})
+```
+
+Let me do the same for low fare carriers (skipping the large plot):
+
+```{r echo=FALSE}
+local({
+  af_local <- af %>% 
+    group_by(carrier_low) %>% 
+    summarise(median_fare_low = median(fare_low)) %>% 
+    arrange(desc(median_fare_low))
+  carriers = af_local$carrier_low[1:10]
+  
+  af_local <- af.plot %>% 
+    filter(carrier_low %in% carriers)
+  
+  ggplot(af_local, aes(x = carrier_low, y = fare_low)) + 
+    geom_boxplot() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    coord_cartesian(ylim = c(125, 350))
+})
+```
+
+Cape Air (9K) has the largest fare among the low fare carriers. I'll double 
+check by similarly computing and sorting the median statistic for low fares 
+across all low fare carriers:
+
+```{r echo=FALSE}
+af %>% 
+  group_by(carrier_low) %>% 
+  summarise(median_fare_low = median(fare_low)) %>% 
+  arrange(desc(median_fare_low))
+```
+
+After taking a look at the airlines, I'm curious what I might find if I plot the
+fares across the most traveled airports:
+
+```{r echo=FALSE}
 af.top_ap <- af.plot %>%
   filter(airport_1 %in% top_ten_airports | airport_2 %in% top_ten_airports) %>%  
   group_by(airport_1) %>%  
@@ -537,8 +883,12 @@ ggplot(af.top_ap, aes(x = larger_ap, y = fare)) +
   geom_hline(aes(yintercept = median(fare)), linetype = 2)
 ```
 
-It's interesting to see the average fares among the most traveled airports and
-see which ones are higher or lower than the median fare among the group.
+The dotted line is the overall median of `fare` across all airport pairs. It's
+interesting to see the average fares among the most traveled airports and see 
+which ones are higher or lower than the median fare among the group.
+
+So, which of the airports in the plot above have a median fare above the overall
+median fare?
 
 ```{r echo=FALSE}
 af.top_ap %>%
@@ -549,14 +899,19 @@ af.top_ap %>%
   arrange(desc(diff))
 ```
 
-Well, looks like if you're in any of the cities above you're paying more than
-the median fare across all airports, but it also depends on where you're going. 
-Also, it's worth mentioning that these airports serve plenty of markets, which
-could be a factor.
+Well, it looks like if you're in any of the cities above that you're paying more
+than the median fare across all airports, but it also depends on where you're
+going.Also, it's worth mentioning that these airports serve plenty of markets, 
+which could be a factor.
+
+Finally, let's take a first step towards building a linear model based on `fare`
+and `nsmiles`:
 
 ```{r echo=FALSE}
 summary(lm(fare ~ nsmiles, data = af), data = af)
 ```
+
+Looks like we can account for 20.96% of the fare variance with this model.
 
 # Bivariate Analysis
 
@@ -567,9 +922,9 @@ has also been a slow trend towards increasing prices since 2005, but it might
 be good to compare this to inflation to see if actual costs have increased.
 Passengers had a negligible relationship to fare.
 
-Based on the $R^2$ value, distance accounts for 20.96% of the variance in fare. Other
-features can be incorporated into the model to better explain the variance in 
-price, which I will build on in multivariate analysis.
+Based on the $R^2$ value, distance accounts for 20.96% of the variance in fare. 
+Other features can be incorporated into the model to better explain the variance
+in price, which I will build on in multivariate analysis.
 
 ### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
 
@@ -583,23 +938,12 @@ The strongest relationship I found was between fare and distance.
 
 # Multivariate Plots Section
 
-```{r echo=FALSE, Multivariate_Plots}
-ggplot(af.plot, aes(x = haul, y = fare)) + 
-  geom_boxplot()
-
-af.top_ap_5 <- subset(af.top_ap, larger_ap %in% top_five_airports)
-  
-ggplot(af.top_ap_5, aes(x = nsmiles, y = fare)) + 
-  geom_line(stat = 'summary', fun.y = median) +
-  facet_wrap( ~ larger_ap)
-```
-
-It's neat to see the cut-off of distance with DFW and ORD, which makes sense
-since they're more central to the country.
+Let's take a look at the ratio of `fare` to `nsmiles`, which could be considered
+fare value or cost per mile for fares (split by trip length):
 
 ```{r echo=FALSE}
 ggplot(aes(x = fare / nsmiles), data = af.plot) + 
-  geom_histogram(aes(color = haul), binwidth = 0.01) +
+  geom_histogram(aes(fill = haul), binwidth = 0.01, position = 'dodge') +
   coord_cartesian(xlim = c(0, 1)) +
   scale_x_continuous(breaks = seq(0, 15, 1))
 
@@ -624,6 +968,7 @@ ggplot(aes(x = nsmiles, y = fare / nsmiles), data = af.plot) +
   geom_smooth() +
   coord_cartesian(ylim = c(0, 1.25)) +
   scale_x_continuous(breaks = seq(0, 3000, 250)) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
   stat_smooth(method = 'lm', col = 'green', 
               data = subset(af.plot, nsmiles <= 500)) +
   stat_smooth(method = 'lm', col = 'yellow', 
@@ -638,8 +983,14 @@ As you can see there is a lot of variance in cost per mile for travel under 500
 miles. However, as a consumer if you travel larger distances you will eventually
 enjoy much better costs per mile.
 
-With the graph of fare value being non-linear, I now want to revisit fare vs
-miles traveled with different scales:
+In the plot above, the individual data points (colored in red or blueish-green) 
+are overlayed with a smoothed conditional mean of the data in blue. The green
+and yellow lines are piece-wise linear fits for short and medium haul trips. 
+Finally, the black line is a rough approximation of a non-linear fit that is
+essentially an inverse square root function.
+
+With the above plot of fare value value being non-linear, it makes me weant to
+revisit fare vs miles traveled (bivariate analysis) with different scales:
 
 ```{r echo=FALSE}
 ggplot(af.plot, aes(x = nsmiles, y = fare)) + 
@@ -662,6 +1013,9 @@ summary(lm(I(log10(fare)) ~ I(sqrt(nsmiles)), data = af))
 $R^2$ went up by 1.83% with this change, so we can now better account for the 
 relationship between fares and distance between airports.
 
+Continuing with the concept of fare value, let's take a look at the fare value
+across the largest airports (by activity):
+
 ```{r echo=FALSE}
 ggplot(subset(af.top_ap, larger_ap %in% top_ten_airports), 
        aes(x = larger_ap, y = nsmiles / fare)) +
@@ -682,12 +1036,21 @@ Airport) is among the weakest in terms of miles per dollar. You could consider
 this if you were moving to either of these two cities and planning to travel 
 quite a bit.
 
+I now want to see what the fare value is across large fare carriers:
+
 ```{r echo=FALSE}
 ggplot(af.plot, aes(x = carrier_lg, y = nsmiles / fare)) +
   geom_boxplot() +  
-  coord_cartesian(ylim = c(0, 15)) +
+  coord_cartesian(ylim = c(0, 14)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   geom_hline(aes(yintercept = median(nsmiles / fare)), linetype = 2)
+```
 
+While this is a fairly busy plot, there is one airline that sticks out among
+the rest: National Airlines (N7). Let's look at some of the data for the
+airline:
+
+```{r echo=FALSE}
 af %>%
   filter(carrier_lg == 'N7') %>%
   arrange(desc(Year))
@@ -695,6 +1058,8 @@ af %>%
 
 National Airlines gave the best mileage per dollar fares between 2001-2002, but
 it might explain why they are no longer around, too.
+
+Let's zoom in on the fare value among the most popular carriers:
 
 ```{r echo=FALSE}
 al.top <- af.plot %>%
@@ -716,16 +1081,21 @@ airlines that provide the best value for mileage per dollar. If you're traveling
 long distances across country, it's likely you'll find good fares with those
 two airlines.
 
+Let's take a look at the fare value over the years:
+
 ```{r echo=FALSE}
 ggplot(af.plot, aes(x = Year, y = fare / nsmiles)) +
   geom_line(stat = 'summary', fun.y = mean) +
+  geom_jitter(alpha = 1 / (nrow(af.plot) * 0.0005)) +  
+  coord_cartesian(ylim = c(0.05, 0.5)) +
   scale_x_continuous(breaks = seq(min(af.plot$Year), max(af.plot$Year), 1))
 ```
 
 Over the years we have seen an increasing cost per mile traveled, but currently
 we're experience a downward trend in cost per mile.
 
-Back to our linear model of log10(fare) ~ sqrt(nsmiles) + additional variables:
+So, revisiting our linear model of log10(fare) ~ sqrt(nsmiles) + additional 
+variables, let's take a look at residuals:
 
 ```{r echo=FALSE, eval=TRUE}
 m1 <- lm(I(log10(fare)) ~ I(sqrt(nsmiles)), data = af)
@@ -754,8 +1124,14 @@ with(dat, sd(m5.residuals))
 
 ggplot(aes(y = m5.residuals, x = sqrt(nsmiles)), data = dat) + 
   geom_line(stat = "summary", fun.y = sd) +
+  geom_jitter(alpha = 1 / (nrow(dat) * 0.0005)) +  
+  coord_cartesian(ylim = c(-0.25, 0.5)) +
   geom_hline(aes(yintercept = sd(m5.residuals)), color = 'blue')
 ```
+
+The individual residual data is plotted as points. The blue line is the standard
+deviation of all residuals, which is 0.1. The black line plot is the standard
+deviation at each reference mileage (or rather sqrt of mileage).
 
 # Multivariate Analysis
 
@@ -790,17 +1166,29 @@ fares.
 ```{r echo=FALSE, Plot_One}
 ggplot(af.plot, aes(x = as.Date(as.yearqtr(paste(Year, quarter, sep = "-"))), 
                     y = fare / nsmiles)) +
+  geom_boxplot(aes(group = Year)) +
   geom_smooth(color = 'orange') + 
   geom_line(color = 'blue', stat = 'summary', fun.y = mean) +
-  ggtitle("Cost per mile over time") +
+  ggtitle("Domestic air travel cost per mile from 2001-2014") +
   xlab("Year / Qtr") +
-  ylab("Cost per mile")
+  ylab("Cost per mile") +
+  coord_cartesian(ylim = c(0.1, 0.4)) +
+  scale_x_date(breaks = "1 year", labels = date_format("%Y")) +
+  theme(axis.text.x=element_text(angle=-45, hjust=0.001))
 ```
 
 ### Description One
 
-The cost per mile for air travel has fluctated over time and was the worst in
-2008. Currently, we are experiencing a downward trend in cost per mile traveled.
+One interesting aspect of travel in general is the cost per mile for a transport
+mode. The cost per mile for air travel has fluctated over time and was the worst
+for a 14 year span (2001-2014) in 2008. Currently, we are experiencing a 
+downward trend in cost per mile traveled as of 2014 Q4 with an inflection point 
+in 2013. The blue line depicts the average cost per mile on a quarterly interval
+time series, which you can see fluctuates from quarter to quarter. The orange 
+line is a smoothing of the same data to show trends more easily. The boxplot
+underneath shows the variance of cost per mile segmented yearly with the box
+representing the interquartile range (IQR) and the median by the horizontal bar
+within the plot. The median cost per mile was also the highest in 2008.
 
 ### Plot Two
 ```{r echo=FALSE, Plot_Two}
@@ -816,7 +1204,7 @@ p2.1 <- ggplot(subset(af.top_ap, larger_ap %in% top_ten_airports),
 
 p2.2 <- ggplot(al.top, aes(x = carrier_lg, y = nsmiles / fare)) +
   geom_boxplot(aes(fill = factor(carrier_lg))) +  
-  coord_cartesian(ylim = c(1.5, 9.5)) +
+  coord_cartesian(ylim = c(1.5, 10)) +
   geom_hline(aes(yintercept = median(nsmiles / fare)), linetype = 2) +
   theme(legend.position="none") +
   scale_fill_brewer(type = 'qual') +
@@ -829,15 +1217,23 @@ grid.arrange(p2.1, p2.2, nrow = 2, ncol = 1)
 
 ### Description Two
 
+Mileage per dollar spent can be a metric for value. If you consider the mileage
+per dollar for airports, then you might have a sense of which airports offer 
+good value for flying to or from, especially if you have a business where travel
+is frequent and you would like to minimize costs. If you consider the mileage 
+per dollar for popular airlines, then you might have a sense of which airlines
+generally are going to have the best prices and ultimately, which frequent flyer
+programs or credit cards to join / acquire.
+
 The plot of mileage per dollar across the ten largest airports (by activity) 
 shows that Los Angeles International Airport (LAX) and Tampa International 
 Airport (TPA) have the best median mileage per dollar spent. O'Hare 
-International Airport (ORD) has the worst median mileage per dollar.
+International Airport (ORD) has the worst median mileage per dollar. 
 
 The plot of mileage per dollar across the most popular airlines shows that 
 Virgin America and JetBlue Airways provide the best value in terms of how far
-you can travel per dollar. US Airways (now owned by American Airlines) is among
-the worst in terms of mileage per dollar.
+you can travel per dollar. US Airways (now owned by American Airlines) is the
+worst in terms of mileage per dollar.
 
 ### Plot Three
 ```{r echo=FALSE, Plot_Three}
@@ -851,6 +1247,7 @@ ggplot(aes(x = nsmiles, y = fare / nsmiles), data = af.plot) +
   stat_smooth(method = 'lm', col = 'yellow',
               data = subset(af.plot, nsmiles > 500)) +
   scale_color_discrete(labels = c("Short (<= 500 mi)", "Medium (> 500 mi)")) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
   ggtitle("Cost per mile for distance flown") +
   xlab("One-way distance between airports") +
   ylab("Cost per mile") +
@@ -859,9 +1256,18 @@ ggplot(aes(x = nsmiles, y = fare / nsmiles), data = af.plot) +
 
 ### Description Three
 
+Another way of considering value with air travel is how much the cost per mile 
+is for a given trip length. If you consider the value based on traveled miles,
+then you might travel farther to get the most travel for your money.
+
 The plot of fare value (i.e. cost per mile) with one-way distance between 
 airports roughly follows an inverse square root function. The cost per mile has
-high variance for travel up to 500 miles.
+high variance for travel up to 500 miles as you can see values can vary 
+(roughly) between $1.25 (and beyond) to $0.38 after smoothing. For travel above 
+500 miles, the variance roughly sits between $0.38 and $0.12 after smoothing.
+It's interesting to see that the distinction between short and medium haul trips
+by the air travel industry at 500 miles matches a "corner turn" in terms of fare
+value as well.
 
 ------
 
@@ -892,24 +1298,22 @@ between General Mitchell International Airport (MKE) in Milwaukee, WI and O'Hare
 International Airport (ORD).
 * The most passengers traveling per day between two airports on average is 
 between LAX and SFO (or vice-versa).
-* The most passengers that traveled per day on average between 2001-2014 is
-between JFK and LAX (or vice-versa), which was in 2014 Q4.
+* The most passengers that traveled per day on average overall between 2001-2014
+is between JFK and LAX (or vice-versa), which was in 2014 Q4.
 * It seems like there is less competition among carriers for short distance
 (< 500 mi) travel based on the market share of the carriers.
 * Short haul trips (< 500 miles) have more passengers on average than medium 
 haul trips (e.g. coast-to-coast travel), which might mean that your flight will 
-be more cramped if you are on one of those.
+be more cramped if you are on a short trip.
 * If you're flying out of LAX frequently, it's possible you're paying more for
 your flight than people who are flying out of other airports based on the median
 fare. However, it's also likely that you're getting a better cost per mile
 for the distance you are traveling.
-* Flights from the East 34th Street Heliport (TSS) in NYC are the highest 
+* Flights from the East 34th Street Heliport (TSS) in NYC have the highest 
 average fares across the country.
 * There is only a 7% variance between average high and low fares across all
 quarterly data, so if you're looking for a deal, consider that as your window
 for fares.
-* For quick off-the-cuff estimating cost per mile, you can calculate it by using
-$f(x) = 10 / sqrt(x)$ where x is the mileage you are traveling.
 * If you're traveling short distances (< 500 mi), then you're likely to have a
 lot of variation in price. As you book travel for longer distances (> 500 mi)
 you can count on steadier prices.
