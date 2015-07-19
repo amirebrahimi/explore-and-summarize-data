@@ -938,8 +938,9 @@ The strongest relationship I found was between fare and distance.
 
 # Multivariate Plots Section
 
-Let's take a look at the ratio of `fare` to `nsmiles`, which could be considered
-fare value or cost per mile for fares (split by trip length):
+To ease into our multivariate analysis, let's first take a look at the ratio 
+of `fare` to `nsmiles` (bivariate), which could be considered fare value or cost
+per mile for fares (split by trip length):
 
 ```{r echo=FALSE}
 ggplot(aes(x = fare / nsmiles), data = af.plot) + 
@@ -989,7 +990,7 @@ and yellow lines are piece-wise linear fits for short and medium haul trips.
 Finally, the black line is a rough approximation of a non-linear fit that is
 essentially an inverse square root function.
 
-With the above plot of fare value value being non-linear, it makes me weant to
+With the above plot of fare value value being non-linear, it makes me want to
 revisit fare vs miles traveled (bivariate analysis) with different scales:
 
 ```{r echo=FALSE}
@@ -1081,7 +1082,7 @@ airlines that provide the best value for mileage per dollar. If you're traveling
 long distances across country, it's likely you'll find good fares with those
 two airlines.
 
-Let's take a look at the fare value over the years:
+Let's take a look at the fare value over the years (bivariate):
 
 ```{r echo=FALSE}
 ggplot(af.plot, aes(x = Year, y = fare / nsmiles)) +
